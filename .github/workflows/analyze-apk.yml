@@ -1,0 +1,78 @@
+name: Analyze APK (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      apk_url:
+        description: "URL download APK (opsional, kalau kosong pakai file di apk/)"
+        required: false
+        default: ""
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install androguard==4.0.0 pyaxmlparser==0.3.31 requests
+
+      - name: Prepare APK folder
+        run: |
+          mkdir -p apk output
+          if [ -n "${{ github.event.inputs.apk_url }}" ]; then
+            echo "Downloading from URL..."
+            wget -O apk/input.apk "${{ github.event.inputs.apk_url }}"
+          fi
+          ls -la apk/ || true
+
+      - name: Check APK exists
+        run: |
+          if [ -z "$(ls -A apk/*.apk 2>/dev/null)" ]; then
+            echo "❌ Tidak ada APK. Isi apk_url atau upload file ke apk/"
+            exit 1
+          fi
+
+      - name: Run analysis
+        run: python scripts/analyze.py
+
+      - name: Create ZIP bundle
+        run: |
+          cd output
+          zip -r ../apk-analysis-result.zip ./*
+          cd ..
+          ls -la apk-analysis-result.zip
+
+      - name: Upload artifact (ZIP)
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-analysis-zip
+          path: apk-analysis-result.zip
+
+      - name: Upload artifact (raw files)
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-analysis-files
+          path: output/
+
+      - name: Job Summary
+        run: |
+          echo "## 📊 APK Analysis Result" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- \`apk-analysis-zip\` — bundle lengkap (ZIP)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`apk-analysis-files\` — file individual" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Ringkasan" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          tail -40 output/report.txt >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

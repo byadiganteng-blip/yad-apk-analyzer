@@ -1,0 +1,53 @@
+name: Analyze APK (Auto)
+
+on:
+  push:
+    paths:
+      - "apk/*.apk"
+      - "apk/**/*.apk"
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install androguard==4.0.0 pyaxmlparser==0.3.31
+
+      - name: Check APK
+        run: |
+          mkdir -p output
+          if [ -z "$(ls -A apk/*.apk 2>/dev/null)" ]; then
+            echo "❌ Tidak ada APK di apk/"
+            exit 1
+          fi
+          echo "✅ APK ditemukan:"
+          ls -la apk/
+
+      - name: Run analysis
+        run: python scripts/analyze.py
+
+      - name: Create ZIP
+        run: |
+          cd output
+          zip -r ../apk-analysis-result.zip ./*
+          cd ..
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-analysis-${{ github.run_number }}
+          path: |
+            apk-analysis-result.zip
+            output/
